@@ -49,4 +49,10 @@ class EventGlobalSchema(BaseModel):
     available_tickets : int
 
     
+class BookingSchema(BaseModel):
+    event_id : int
+    user_id : int
+    number_of_tickets : int
+    total_price : float
+    order_status : str
     

@@ -1,12 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from .auth import verify_token, oauth2_scheme
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from api.database import get_db
-from api.models import Users, Event
+from api.models import Users, Event, Booking
 import requests
-from api.schema import EventSchema, EventGlobalSchema
+from api.schema import EventSchema, EventGlobalSchema, BookingSchema
 from datetime import datetime
 from api.config import GOOGLE_MAPS_API_KEY, PAYPAL_SECRET_KEY, PAYPAL_CLIENT_ID, PAYPAL_ENV, HOST
 import paypalrestsdk
@@ -149,14 +149,15 @@ async def book_event(event_id: int,
         event.available_tickets = event.available_tickets - ticket_quantity
         
         # Generate PayPal payment URL
+        
         payment = Payment({
             "intent": "sale",
             "payer": {
                 "payment_method": "paypal"
             },
             "redirect_urls": {
-                "return_url": f"{HOST}/success/?token={token}",
-                "cancel_url": f"{HOST}/cancel?token={token}"
+                "return_url": f"{HOST}/success/?jwt_token={token}",
+                "cancel_url": f"{HOST}/cancel?jwt_token={'kjbk'}"
             },
             "transactions": [{
                 "item_list": {
@@ -175,12 +176,23 @@ async def book_event(event_id: int,
                 "description": "Booking tickets."
             }]
         })
-
+        print("payment", payment)
         if payment.create():
+            #  commit the changes from 
             db.commit()
             db.refresh(event) 
+
+            db_booking = Booking(event_id=event.id,user_id=1, number_of_tickets=ticket_quantity, total_price= (event.price_per_ticket * ticket_quantity), order_status="processing" )
+            db.add(db_booking)
+            db.commit()
+            db.refresh(db_booking)
+
+
+            
+
             for link in payment.links:
                 if link.rel == "approval_url":
+                    print("data ", link)
                     return {"data":link.href, "message":"payment link generated successfully"}
         else:
             db.rollback()
@@ -199,6 +211,7 @@ async def success_payment(paymentId: str, PayerID: str, db: Session = Depends(ge
     # Handle payment confirmation here
     try:
         payment = Payment.find(paymentId)
+        print("Payment id ", payment)
         if payment.execute({"payer_id": PayerID}):
             # reservation = db.query(TicketReservation).filter(
             #     TicketReservation.status == 'reserved',
@@ -224,9 +237,8 @@ async def success_payment(paymentId: str, PayerID: str, db: Session = Depends(ge
         raise HTTPException(status_code=500, detail="Unexpected error: " + str(e))
 
 @router.get('/cancel')
-async def cancel(request: Request, token: str = Depends(oauth2_scheme)):
-    print("token")
-    # Perform any necessary cleanup or logging
+async def cancel(request: Request):
+    # print("token is ",jwt)
     return {"message": "Payment was canceled. Please try again if you wish to complete the transaction."}
     
 """ 

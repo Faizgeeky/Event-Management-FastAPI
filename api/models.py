@@ -47,6 +47,7 @@ class Booking(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     number_of_tickets = Column(Integer)
     total_price = Column(Integer)
+    order_status = Column(String)
     event = relationship("Event")
 
 # class Payments(Base)
