@@ -205,16 +205,17 @@ async def book_event(event_id: int,
             }]
         })
 
-        if payment.create():
-            #  there is lot of data in paynebt clear and only return payment url
-            for link in payment.links:
-                if link.rel == "approval_url":
-                    print("data ", link)
-                    return {"data":link.href, "message":"payment link generated successfully"}
-        else:
-            db.rollback()
-            raise HTTPException(status_code=500, detail="PayPal payment creation failed.")
-            
+        try:
+            if payment.create():
+                for link in payment.links:
+                    if link.rel == "approval_url":
+                        return {"payment_url": link.href}
+            else:
+                error_message = payment.error['message'] if 'message' in payment.error else str(payment.error)
+                raise HTTPException(status_code=500, detail=f"PayPal payment creation failed: {error_message}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
     except SQLAlchemyError as se:
        raise HTTPException(status_code=500, detail="Database error: " + str(se))
 
