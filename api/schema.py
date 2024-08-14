@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-
+from datetime import datetime
 
 # USer schemas
 class UserSchema(BaseModel):
@@ -28,3 +28,25 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     user: str
     expiry: float
+
+
+# Event Schema 
+class EventSchema(BaseModel):
+    name : str
+    date : datetime
+    location : str
+    available_tickets : int
+    price_per_ticket : float
+
+
+class EventGlobalSchema(BaseModel):
+    id : int
+    name : str
+    date : str
+    location : str
+    latitude : float
+    longitude : float
+    available_tickets : int
+
+    
+    

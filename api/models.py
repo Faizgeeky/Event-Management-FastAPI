@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, CheckConstraint, Float
 from sqlalchemy.orm import relationship
 from .database import Base
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -24,7 +24,21 @@ class Event(Base):
     name = Column(String, index=True)
     date = Column(DateTime)
     location = Column(String)
+    latitude = Column(Float)
+    longitude = Column(Float)
     available_tickets = Column(Integer)
+    reserve_tickets = Column(Integer, default=0)
+    price_per_ticket =  Column(Float)
+
+    def check_add_tickets(self, available_tickets):
+        if available_tickets <= 0:
+            raise ValueError("Available tickets must be greater than 0.")
+        self.available_tickets = available_tickets
+    
+    def check_add_ticket_price(self, price_per_ticket):
+        if price_per_ticket <= 0:
+            raise ValueError("Ticket price must be greater than 0.")
+        self.price_per_ticket = price_per_ticket
 
 class Booking(Base):
     __tablename__ = "bookings"
@@ -34,3 +48,5 @@ class Booking(Base):
     number_of_tickets = Column(Integer)
     total_price = Column(Integer)
     event = relationship("Event")
+
+# class Payments(Base)

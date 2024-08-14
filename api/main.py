@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from .routes import index, auth
+from .routes import index, auth, events
 from .database import engine, Base
 from .admin import create_admin_user
 app = FastAPI()
@@ -12,3 +12,4 @@ app.include_router(index.router)
 # auth route
 app.include_router(auth.router)
 #events route
+app.include_router(events.router)
