@@ -1,3 +1,12 @@
+'''
+Written By : Faizmohammad Nandoliya
+Last Updated     : 14-08-2024
+Contact  : nandoliyafaiz429@gmail.com
+
+NOTE : In function 'geocode_address' I have handled else block manually kindly change that in production. 
+(I did beacuse I had no working Google map API)
+'''
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from .auth import verify_token, oauth2_scheme
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -6,7 +15,7 @@ from sqlalchemy.orm import Session
 from api.database import get_db
 from api.models import Users, Event, Booking
 import requests
-from api.schema import EventSchema, EventGlobalSchema, BookingSchema
+from api.schema import EventSchema, EventGlobalSchema, BookingSchema, PaymentStatus
 from datetime import datetime
 from api.config import GOOGLE_MAPS_API_KEY, PAYPAL_SECRET_KEY, PAYPAL_CLIENT_ID, PAYPAL_ENV, HOST
 import paypalrestsdk
@@ -20,8 +29,6 @@ paypalrestsdk.configure({
 
 router = APIRouter()
 
-
-
 def geocode_address(address: str):
     url = f"https://maps.googleapis.com/maps/api/geocode/json"
     params = {
@@ -30,25 +37,27 @@ def geocode_address(address: str):
     }
     response = requests.get(url, params=params)
     data = response.json()
-    print("data is", data)
+
     if data['status'] == 'OK':
         location = data['results'][0]['geometry']['location']
         return location['lat'], location['lng']
     else:
-        # reaise error here TEMP returning Oolka cordinates
+        # raise error here TEMPORARY returning Oolka office cordinates
         return 12.925738470141543, 77.67473271259571
 
-# @router.post('/event')
-# def add_event(request : EvntSchema, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db) ):
-    
+# get the current loggedIn user from token decoding and model
+def get_current_user(token):
+    decoded_token = verify_token(token)
+    db = next(get_db())
+    user = db.query(Users).filter(Users.email == decoded_token.user).first()
+    return user
+
 
 @router.post('/event')
 def add_event(event : EventSchema,token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     latitude, longitude = geocode_address(event.location)
     
-    decoded_token = verify_token(token)
-
-    user = db.query(Users).filter(Users.email == decoded_token.user).first()
+    user = get_current_user(token)
     try:
         if user.is_admin and latitude != None and longitude != None:
             db_event = Event(name = event.name, date = event.date, location = event.location, latitude = latitude, longitude =  longitude)
@@ -113,51 +122,70 @@ async def book_event(event_id: int,
     request: Request,
     token: str = Depends(oauth2_scheme), 
     db: Session = Depends(get_db)):
+
+    """ 
+    Flow to book event 
+    1. Check if Ticket quantity is there else set default 1
+    2. Check if Even exisit 
+    3. Check if even date is not passed 
+    4. Check if ticket available based on quantity
+    5. Deduct required tickets from total ticket and  add it in reserve tickets 
+    6. Add booking and set status to Processing 
+    7. Genetate payment url (add success , cancel payment url's)
+    """
+
     if event_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid event ID. ID must be a positive integer.")
     query_params = request.query_params
-    print("data is here ", query_params)
-
+    
+    # get current user 
+    user = get_current_user(token)
+   
     # set defaut booking ticket is 1 
     ticket_quantity = 1
     
     try:
-        # ticket quantity available in param update quantity
+        # 1. Check if Ticket quantity is there else set default 1
         if 'ticket_quantity' in query_params:
             if int(query_params['ticket_quantity']) >0:
                 ticket_quantity = int(query_params['ticket_quantity'])
             else:
                 raise HTTPException(status_code=400, detail=f"Invalid Ticket Quantity")
-        print("check point 1")
-        # get event by id
+        
+        # 2.Check if Even exisit 
         event = db.query(Event).filter(Event.id == event_id).first()
         if event is None:
             raise HTTPException(status_code=404, detail=f"Event with ID {event_id} not found.")
-        print("check point 2")
         
-        # check if avaliable tickets are more than ticket quantity
-        if int(event.available_tickets) < ticket_quantity:
-            raise HTTPException(status_code=400, detail=f"Only {event.available_tickets} left")
-        print("check point 3", type(event.date))
-        
-        # check if event date is not past
+        # 3.Check if even date is not passed 
         if event.date < datetime.utcnow():
             raise HTTPException(status_code=400, detail="Event is closed for booking.")
-        print("check point 4")
-        
+
+        # 4.check if avaliable tickets are more than ticket quantity
+        if int(event.available_tickets) < ticket_quantity:
+            raise HTTPException(status_code=400, detail=f"Only {event.available_tickets} left")
+                
+        # 5.Deduct required tickets from total ticket and  add it in reserve tickets 
         event.reserve_tickets =  event.reserve_tickets + ticket_quantity
         event.available_tickets = event.available_tickets - ticket_quantity
+        db.commit()
+        db.refresh(event) 
         
-        # Generate PayPal payment URL
-        
+        # 6. Add booking and set status to Processing 
+        db_booking = Booking(event_id=event.id,user_id=user.id, number_of_tickets=ticket_quantity, total_price= (event.price_per_ticket * ticket_quantity), order_status=PaymentStatus.PENDING )
+        db.add(db_booking)
+        db.commit()
+        db.refresh(db_booking)
+
+        # Genetate payment url (add success , cancel payment url's)
         payment = Payment({
             "intent": "sale",
             "payer": {
                 "payment_method": "paypal"
             },
             "redirect_urls": {
-                "return_url": f"{HOST}/success/?jwt_token={token}",
-                "cancel_url": f"{HOST}/cancel?jwt_token={'kjbk'}"
+                "return_url": f"{HOST}/success/?event_id={event.id}&booking_id={db_booking.id}&jwt_token={token}",
+                "cancel_url": f"{HOST}/cancel/?event_id={event.id}&booking_id={db_booking.id}&jwt_token={token}"
             },
             "transactions": [{
                 "item_list": {
@@ -176,20 +204,9 @@ async def book_event(event_id: int,
                 "description": "Booking tickets."
             }]
         })
-        print("payment", payment)
+
         if payment.create():
-            #  commit the changes from 
-            db.commit()
-            db.refresh(event) 
-
-            db_booking = Booking(event_id=event.id,user_id=1, number_of_tickets=ticket_quantity, total_price= (event.price_per_ticket * ticket_quantity), order_status="processing" )
-            db.add(db_booking)
-            db.commit()
-            db.refresh(db_booking)
-
-
-            
-
+            #  there is lot of data in paynebt clear and only return payment url
             for link in payment.links:
                 if link.rel == "approval_url":
                     print("data ", link)
@@ -207,45 +224,92 @@ async def book_event(event_id: int,
 
 
 @router.get('/success')
-async def success_payment(paymentId: str, PayerID: str, db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)):
-    # Handle payment confirmation here
-    try:
-        payment = Payment.find(paymentId)
-        print("Payment id ", payment)
-        if payment.execute({"payer_id": PayerID}):
-            # reservation = db.query(TicketReservation).filter(
-            #     TicketReservation.status == 'reserved',
-            #     TicketReservation.id == payment.transactions[0].item_list.items[0].sku
-            # ).first()
+async def success_payment(paymentId: str,db: Session = Depends(get_db)):
+    return {"message":"Payment successfull!"}
+    # # Handle payment confirmation here
+    # try:
+    #     payment = Payment.find(paymentId)
+    #     print("Payment id ", payment)
+    #     if payment.execute({"payer_id": PayerID}):
+    #         # reservation = db.query(TicketReservation).filter(
+    #         #     TicketReservation.status == 'reserved',
+    #         #     TicketReservation.id == payment.transactions[0].item_list.items[0].sku
+    #         # ).first()
 
-            # if not reservation:
-            #     raise HTTPException(status_code=404, detail="Reservation not found.")
+    #         # if not reservation:
+    #         #     raise HTTPException(status_code=404, detail="Reservation not found.")
             
-            # Confirm the reservation
-            # reservation.status = 'paid'
-            # event = db.query(Event).filter(Event.id == reservation.event_id).first()
-            if 1==1:
-                # event.available_tickets -= reservation.reserved_tickets
-                db.commit()
-                return {"message": "Booking confirmed successfully"}
-            else:
-                raise HTTPException(status_code=404, detail="Event not found.")
-        else:
-            raise HTTPException(status_code=400, detail="Payment not completed.")
+    #         # Confirm the reservation
+    #         # reservation.status = 'paid'
+    #         # event = db.query(Event).filter(Event.id == reservation.event_id).first()
+    #         if 1==1:
+    #             # event.available_tickets -= reservation.reserved_tickets
+    #             db.commit()
+    #             return {"message": "Booking confirmed successfully"}
+    #         else:
+    #             raise HTTPException(status_code=404, detail="Event not found.")
+    #     else:
+    #         raise HTTPException(status_code=400, detail="Payment not completed.")
     
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Unexpected error: " + str(e))
+    # except Exception as e:
+    #     raise HTTPException(status_code=500, detail="Unexpected error: " + str(e))
+
 
 @router.get('/cancel')
-async def cancel(request: Request):
-    # print("token is ",jwt)
-    return {"message": "Payment was canceled. Please try again if you wish to complete the transaction."}
+async def cancel(request: Request,booking_id : str, jwt_token: str, db: Session = Depends(get_db)):
+    """ 
+    Flow:
+    1. Check if token is valid and filter user
+    2. If user exisit continue
+    3. Check if booking data exisit based on booking id in url req with user and payment status matched
+    4. Check if event exist with same id
+    5. Update total tickets summinng canceled tickets 
+    6. Update reserve tickets by subtracting canceled tickets 
+    7. Commit and responde
+    """
+    user = get_current_user(jwt_token)
+    if user:
+        try:
+            booking_db = db.query(Booking).filter(Booking.id == booking_id, Booking.user_id == user.id, Booking.order_status == PaymentStatus.PENDING ).first()
+            if booking_db is None:
+                raise HTTPException(status_code=400, detail="Booking data not found" )
+            
+            event_db = db.query(Event).filter(Event.id == booking_db.event_id).first()
+            if event_db is None:
+                raise HTTPException(status_code=400, detail="Event data not found" )
+            
+            event_db.available_tickets += booking_db.number_of_tickets
+            event_db.reserve_tickets -= booking_db.number_of_tickets
+            
+            booking_db.order_status = PaymentStatus.FAILED
+            db.commit()
+            db.refresh(event_db)
+            db.refresh(booking_db)
+            return {"message":f"Booking canceld for the Event {event_db.name}"}
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="An unexpected error occurred: " + str(e))
+    else:
+        raise HTTPException(status_code=401, detail="Unauthorized access")
+            
     
+    
+
+
 """ 
-1. Accept book request 
-2. Check tickets avaibale 
-3. Check event exisit 
-4. Create and reserve tickets until the payment has been made 1 minutes 
-5. If payment is succesfull - remove reserved tickets 
+1. Accept book request  - Done
+2. Check tickets avaibale  - Done
+3. Check event exisit  - Done 
+4. Create and reserve tickets until the payment has been made 1 minutes // Enhancement
+5. If payment is succesfull - remove reserved tickets  
 6. If payment is failed - remove reserved tickets and add it in total tickets 
+"""
+
+
+"""" 
+Enhancement :
+1. When payment url is unclicked 
+2. When user land on cancel or success with expire token 
+3. If same user has pending orders with same event or new event - take care of this so total tickets stays accurate
+
 """

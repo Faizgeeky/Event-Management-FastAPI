@@ -1,6 +1,11 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 
+class PaymentStatus:
+    PENDING = "pending"
+    SUCCESS = "success"
+    FAILED = "failed"
+
 # USer schemas
 class UserSchema(BaseModel):
     username: str
@@ -55,4 +60,3 @@ class BookingSchema(BaseModel):
     number_of_tickets : int
     total_price : float
     order_status : str
-    

@@ -1,3 +1,10 @@
+'''
+Written By : Faizmohammad Nandoliya
+Last Updated     : 14-08-2024
+Contact  : nandoliyafaiz429@gmail.com
+
+'''
+
 from fastapi import FastAPI
 from .routes import index, auth, events
 from .database import engine, Base

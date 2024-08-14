@@ -32,6 +32,8 @@ def verify_token(token: str):
         if payload.get("expiry") >= time.time():
             print("reached here")
             return TokenData(user=payload.get("user"), expiry=payload.get("expiry"))
+        else:
+            raise HTTPException(status_code=401, detail="Token has expired")
 
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
