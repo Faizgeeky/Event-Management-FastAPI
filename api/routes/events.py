@@ -3,11 +3,11 @@ Written By : Faizmohammad Nandoliya
 Last Updated     : 14-08-2024
 Contact  : nandoliyafaiz429@gmail.com
 
-NOTE : In function 'geocode_address' I have handled else block manually kindly change that in production. 
+NOTE : In function 'geocode_address' I have handled "else" block manually kindly change that in production. 
 (I did beacuse I had no working Google map API)
 '''
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Query, Response
 from .auth import verify_token, oauth2_scheme
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from pydantic import ValidationError
@@ -53,7 +53,7 @@ def get_current_user(token):
     return user
 
 
-@router.post('/event')
+@router.post('/event',status_code=201)
 def add_event(event : EventSchema,token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     latitude, longitude = geocode_address(event.location)
     
@@ -66,7 +66,7 @@ def add_event(event : EventSchema,token: str = Depends(oauth2_scheme), db: Sessi
             db.add(db_event)
             db.commit()
             db.refresh(db_event)
-            return {"message": "Event added successfully", "data":db_event}
+            return {"message": "Event created successfully", "data":db_event}
 
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=f"Invalid data: {ve}")
@@ -84,7 +84,7 @@ def add_event(event : EventSchema,token: str = Depends(oauth2_scheme), db: Sessi
 
        
 
-@router.get('/events')
+@router.get('/events',status_code=200)
 def fetch_events( db: Session = Depends(get_db)):
     # fetch all events 
     try:
@@ -99,7 +99,7 @@ def fetch_events( db: Session = Depends(get_db)):
 
 
     
-@router.get('/events/{event_id}')
+@router.get('/events/{event_id}',status_code=200)
 def fetch_events(event_id: int, db: Session = Depends(get_db)):
     if event_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid event ID. ID must be a positive integer.")
@@ -128,10 +128,12 @@ async def book_event(event_id: int,
     1. Check if Ticket quantity is there else set default 1
     2. Check if Even exisit 
     3. Check if even date is not passed 
-    4. Check if ticket available based on quantity
-    5. Deduct required tickets from total ticket and  add it in reserve tickets 
-    6. Add booking and set status to Processing 
-    7. Genetate payment url (add success , cancel payment url's)
+    4.  Check if user has pending or processing payments with other or same events
+    5. Check if ticket available based on quantity
+    6. Deduct required tickets from total ticket and  add it in reserve tickets 
+    7. Add booking and set status to Processing 
+    8. Genetate payment url (add success , cancel payment url's)
+
     """
 
     if event_id <= 0:
@@ -160,30 +162,36 @@ async def book_event(event_id: int,
         # 3.Check if even date is not passed 
         if event.date < datetime.utcnow():
             raise HTTPException(status_code=400, detail="Event is closed for booking.")
+        
+        # 4.  Check if user has pending or processing payments with other or same events
+        previous_booking = db.query(Booking).filter(Booking.user_id == user.id , Booking.order_status == PaymentStatus.PENDING).first()
+        if previous_booking:
+            raise HTTPException(status_code=400, detail=f"Cannot process more than 1 order")
 
-        # 4.check if avaliable tickets are more than ticket quantity
+        # 5.check if avaliable tickets are more than ticket quantity
         if int(event.available_tickets) < ticket_quantity:
             raise HTTPException(status_code=400, detail=f"Only {event.available_tickets} left")
                 
-        # 5.Deduct required tickets from total ticket and  add it in reserve tickets 
+        # 6.Deduct required tickets from total ticket and  add it in reserve tickets 
         event.reserve_tickets =  event.reserve_tickets + ticket_quantity
         event.available_tickets = event.available_tickets - ticket_quantity
         db.commit()
         db.refresh(event) 
         
-        # 6. Add booking and set status to Processing 
+        # 7. Add booking and set status to Processing 
         db_booking = Booking(event_id=event.id,user_id=user.id, number_of_tickets=ticket_quantity, total_price= (event.price_per_ticket * ticket_quantity), order_status=PaymentStatus.PENDING )
         db.add(db_booking)
         db.commit()
         db.refresh(db_booking)
 
-        # Genetate payment url (add success , cancel payment url's)
+        # 8. Genetate payment url (add success , cancel payment url's)
         payment = Payment({
             "intent": "sale",
             "payer": {
                 "payment_method": "paypal"
             },
             "redirect_urls": {
+                # Add jwt token , booking_id , event_id - using which current order can be handled
                 "return_url": f"{HOST}/success/?event_id={event.id}&booking_id={db_booking.id}&jwt_token={token}",
                 "cancel_url": f"{HOST}/cancel/?event_id={event.id}&booking_id={db_booking.id}&jwt_token={token}"
             },
@@ -206,6 +214,7 @@ async def book_event(event_id: int,
         })
 
         try:
+            # filter out the Payment object
             if payment.create():
                 for link in payment.links:
                     if link.rel == "approval_url":
@@ -224,39 +233,66 @@ async def book_event(event_id: int,
 
 
 
-@router.get('/success')
-async def success_payment(paymentId: str,db: Session = Depends(get_db)):
-    return {"message":"Payment successfull!"}
-    # # Handle payment confirmation here
-    # try:
-    #     payment = Payment.find(paymentId)
-    #     print("Payment id ", payment)
-    #     if payment.execute({"payer_id": PayerID}):
-    #         # reservation = db.query(TicketReservation).filter(
-    #         #     TicketReservation.status == 'reserved',
-    #         #     TicketReservation.id == payment.transactions[0].item_list.items[0].sku
-    #         # ).first()
+@router.get('/success', status_code=200)
+async def success_payment(paymentId: str,
+                        PayerID: str,
+                        booking_id : str,
+                        event_id : str,
+                        jwt_token: str, 
+                        db: Session = Depends(get_db)):
+    """ 
+    Flow:
+    1.Verify token
+    2.Verify payment id
+    3.Check Booking by id
+    4.Check event by id
+    5.Update Payment status to "successful"
+    6.Update - deduct booked tickets from Event reserve tickets
+    7.Commit and return 200 message
+    """
+    # 1.Verify token
+    user = get_current_user(jwt_token)
+    try:
+        if user:
+            # 2.Verify payment id
+            payment = Payment.find(paymentId)
+            if payment is None:
+                raise HTTPException(status_code=404, detail="Payment not found")
 
-    #         # if not reservation:
-    #         #     raise HTTPException(status_code=404, detail="Reservation not found.")
-            
-    #         # Confirm the reservation
-    #         # reservation.status = 'paid'
-    #         # event = db.query(Event).filter(Event.id == reservation.event_id).first()
-    #         if 1==1:
-    #             # event.available_tickets -= reservation.reserved_tickets
-    #             db.commit()
-    #             return {"message": "Booking confirmed successfully"}
-    #         else:
-    #             raise HTTPException(status_code=404, detail="Event not found.")
-    #     else:
-    #         raise HTTPException(status_code=400, detail="Payment not completed.")
-    
-    # except Exception as e:
-    #     raise HTTPException(status_code=500, detail="Unexpected error: " + str(e))
+            if payment.execute({"payer_id":PayerID}):
+                # 3.Check Booking by id
+                booking_db = db.query(Booking).filter(Booking.id == booking_id, Booking.order_status == PaymentStatus.PENDING, Booking.user_id == user.id, Booking.event_id == event_id).first()
+                if booking_db is None:
+                    raise HTTPException(status_code=400, detail="Invalid booking request. No booking found for the provided payment ID.")
+                
+                # 4.Check event by id
+                event_db = db.query(Event).filter(Event.id == booking_db.event_id).first()
+                if event_db is None:
+                    raise HTTPException(status_code=404, detail="Event not found")
+                # 5.Update - deduct booked tickets from Event reserve tickets
+                event_db.reserve_tickets -= booking_db.number_of_tickets
+                # 6.Update Payment status to "successful"
+                booking_db.order_status = PaymentStatus.SUCCESS
+                
+                # 7.Commit and return 200 message
+                db.commit()
+                db.refresh(booking_db)
+                db.refresh(event_db)
+                
+                return {"message": f"Payment successful", 
+                            "data":{"ticket_quantity":booking_db.number_of_tickets,
+                            "event_name":event_db.name,
+                            "booking_id":booking_db.id}}
+
+            else:
+                raise HTTPException(status_code=404, detail="Payment failed")
+        else:
+            raise HTTPException(status_code=401, detail="Unauthorized access")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Unexpected error: " + str(e))
 
 
-@router.get('/cancel')
+@router.get('/cancel',status_code=200)
 async def cancel(request: Request,booking_id : str, jwt_token: str, db: Session = Depends(get_db)):
     """ 
     Flow:
@@ -312,5 +348,5 @@ Enhancement :
 1. When payment url is unclicked 
 2. When user land on cancel or success with expire token 
 3. If same user has pending orders with same event or new event - take care of this so total tickets stays accurate
-
+4. Limit the booking tickets so not single person can buy each ticket at a time
 """
