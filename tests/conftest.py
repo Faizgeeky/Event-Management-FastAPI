@@ -6,7 +6,8 @@ from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 from api.main import app
 from api.database import Base, get_db
-
+from api.admin import create_admin_user
+from api.models import Users
 # SQLite database URL for testing
 SQLITE_DATABASE_URL = "sqlite:///./test.db"
 
@@ -23,7 +24,6 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 # Create tables in the database
 Base.metadata.create_all(bind=engine)
 
-
 @pytest.fixture(scope="function")
 def db_session():
     """Create a new database session with a rollback at the end of the test."""
@@ -34,6 +34,23 @@ def db_session():
     session.close()
     transaction.rollback()
     connection.close()
+
+
+@pytest.fixture(scope="function", autouse=True)
+def setup_admin_user(db_session):
+    """Create an admin user in the test database."""
+    
+    # Add an admin user
+    admin_user = Users(
+        username="admin",
+        email="admin@oolka.com",
+        is_admin = True  # Ensure this matches your hashing logic
+    )
+    admin_user.set_password(password="securepassword123")
+
+    db_session.add(admin_user)
+    db_session.commit()
+        
 
 
 @pytest.fixture(scope="function")
@@ -66,4 +83,19 @@ def user_login_payload():
         "password": "Password",
     }
 
-# @pytest.fixture()
+@pytest.fixture()
+def admin_payload():
+    return{
+        "email": "admin@oolka.com",
+        "password":"securepassword123"
+    }
+
+@pytest.fixture()
+def event_payload():
+    return {
+    "name":"Credit Card  - Oolka Season-2",
+    "date" :"2025-09-20T17:30:00",
+    "location":"Oolka - Credit Score Builder",
+    "available_tickets": 85,
+    "price_per_ticket" : 49
+}

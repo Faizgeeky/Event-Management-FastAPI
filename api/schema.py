@@ -76,13 +76,21 @@ class EventSchema(BaseModel):
 class EventGlobalSchema(BaseModel):
     id : int
     name : str
-    date : str
+    date : datetime
     location : str
     latitude : float
     longitude : float
     available_tickets : int
+    price_per_ticket : float
 
+    class Config:
+        orm_mode = True
+        from_attributes = True
     
+class EvenetResponse(BaseModel):
+    Status: Status
+    Event: EventGlobalSchema
+
 class BookingSchema(BaseModel):
     event_id : int
     user_id : int

@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from api.database import get_db
 from api.models import Users, Event, Booking
 import requests
-from api.schema import EventSchema, EventGlobalSchema, BookingSchema, PaymentStatus
+from api.schema import EventSchema, EventGlobalSchema, BookingSchema, PaymentStatus, EvenetResponse, Status
 from datetime import datetime
 from api.config import GOOGLE_MAPS_API_KEY, PAYPAL_SECRET_KEY, PAYPAL_CLIENT_ID, PAYPAL_ENV, HOST
 import paypalrestsdk
@@ -67,7 +67,8 @@ def add_event(event : EventSchema,token: str = Depends(oauth2_scheme), db: Sessi
             db.add(db_event)
             db.commit()
             db.refresh(db_event)
-            return {"message": "Event created successfully", "data":db_event}
+            event =  EventGlobalSchema.from_orm(db_event)
+            return EvenetResponse(Status=Status.Success, Event=event)
 
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=f"Invalid data: {ve}")
