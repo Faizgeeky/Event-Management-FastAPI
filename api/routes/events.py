@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from api.database import get_db
 from api.models import Users, Event, Booking
 import requests
-from api.schema import EventSchema, EventGlobalSchema, BookingSchema, PaymentStatus, EvenetResponse, Status
+from api.schema import EventSchema, EventGlobalSchema, BookingSchema, PaymentStatus, EventResponse, Status, EventsResponse, EventBookResponse
 from datetime import datetime
 from api.config import GOOGLE_MAPS_API_KEY, PAYPAL_SECRET_KEY, PAYPAL_CLIENT_ID, PAYPAL_ENV, HOST
 import paypalrestsdk
@@ -68,7 +68,7 @@ def add_event(event : EventSchema,token: str = Depends(oauth2_scheme), db: Sessi
             db.commit()
             db.refresh(db_event)
             event =  EventGlobalSchema.from_orm(db_event)
-            return EvenetResponse(Status=Status.Success, Event=event)
+            return EventResponse(Status=Status.Success, Event=event)
 
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=f"Invalid data: {ve}")
@@ -90,8 +90,11 @@ def add_event(event : EventSchema,token: str = Depends(oauth2_scheme), db: Sessi
 def fetch_events( db: Session = Depends(get_db)):
     # fetch all events 
     try:
+        #event =  EventGlobalSchema.from_orm(db_event)
+            # return EvenetResponse(Status=Status.Success, Event=event)
         events = db.query(Event).all()
-        return {"message": "Events fetched successfully", "data": events}
+        events = [EventGlobalSchema.from_orm(event) for event in events]
+        return EventsResponse(Status=Status.Success, Events=events)
 
     except SQLAlchemyError as se:
        raise HTTPException(status_code=500, detail="Database error: " + str(se))
@@ -110,7 +113,9 @@ def fetch_events(event_id: int, db: Session = Depends(get_db)):
         event = db.query(Event).filter(Event.id == event_id).first()
         if event is None:
             raise HTTPException(status_code=404, detail=f"Event with ID {event_id} not found.")
-        return {"message": "Event fetched successfully", "data": event}
+        
+        event =  EventGlobalSchema.from_orm(event)
+        return EventResponse(Status=Status.Success, Event=event)
         
     except SQLAlchemyError as se:
        raise HTTPException(status_code=500, detail="Database error: " + str(se))
@@ -216,11 +221,14 @@ async def book_event(event_id: int,
         })
 
         try:
+            return_url = f"{HOST}/success/?event_id={event.id}&booking_id={db_booking.id}&jwt_token={token}",
+            cancel_url = f"{HOST}/cancel/?event_id={event.id}&booking_id={db_booking.id}&jwt_token={token}"
             # filter out the Payment object
             if payment.create():
                 for link in payment.links:
                     if link.rel == "approval_url":
-                        return {"payment_url": link.href}
+                        
+                        return EventBookResponse(Status=Status.Success, Data={'payment_url':link.href, 'return_url':return_url,'cancel_url':cancel_url})
             else:
                 error_message = payment.error['message'] if 'message' in payment.error else str(payment.error)
                 raise HTTPException(status_code=500, detail=f"PayPal payment creation failed: {error_message}")

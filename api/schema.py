@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from enum import Enum
-
+from typing import List
 
 class PaymentStatus:
     PENDING = "pending"
@@ -87,9 +87,18 @@ class EventGlobalSchema(BaseModel):
         orm_mode = True
         from_attributes = True
     
-class EvenetResponse(BaseModel):
+class EventResponse(BaseModel):
     Status: Status
     Event: EventGlobalSchema
+
+class EventsResponse(BaseModel):
+    Status: Status
+    Events: List[EventGlobalSchema]
+
+
+class EventBookResponse(BaseModel):
+    Status: Status
+    Data : dict
 
 class BookingSchema(BaseModel):
     event_id : int

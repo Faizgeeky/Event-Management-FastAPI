@@ -8,6 +8,8 @@ from api.main import app
 from api.database import Base, get_db
 from api.admin import create_admin_user
 from api.models import Users
+from sqlalchemy.orm import Session
+
 # SQLite database URL for testing
 SQLITE_DATABASE_URL = "sqlite:///./test.db"
 
@@ -99,3 +101,25 @@ def event_payload():
     "available_tickets": 85,
     "price_per_ticket" : 49
 }
+
+@pytest.fixture()
+def admin_token(test_client):
+    admin_login_payload = {
+        "email": "admin@oolka.com",
+        "password": "securepassword123"
+    }
+    response = test_client.post("/auth/login", json=admin_login_payload)
+    assert response.status_code == 200
+    response_json = response.json()
+    return response_json['access_token']
+
+@pytest.fixture()
+def event_id(test_client, admin_token, event_payload):
+    headers = {
+        'Authorization': f'Bearer {admin_token}'
+    }
+    response = test_client.post("/event", json=event_payload, headers=headers)
+    assert response.status_code == 201
+    response_json = response.json()
+    return response_json["Event"]['id']
+
