@@ -9,7 +9,13 @@ from fastapi import FastAPI
 from .routes import index, auth, events
 from .database import engine, Base
 from .admin import create_admin_user
-app = FastAPI()
+app = FastAPI(
+     title="Event Booking System - Oolka Task",
+    description="Task assigned by Oolka for backend eng role 'Event Booking System - RESTFul API's' Integrated with Test cases and Documentation. ",
+    version="1.0.0",
+    swagger_ui_parameters={"defaultModelsExpandDepth": -1} 
+)
+
 
 Base.metadata.create_all(bind=engine)
 create_admin_user()

@@ -104,7 +104,9 @@ def fetch_events( db: Session = Depends(get_db)):
 
 
     
-@router.get('/events/{event_id}',status_code=200)
+@router.get('/events/{event_id}',status_code=200,
+          summary="Create Event (Only for admin)", 
+          description="Admin only can add new Event" )
 def fetch_events(event_id: int, db: Session = Depends(get_db)):
     if event_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid event ID. ID must be a positive integer.")
@@ -124,22 +126,25 @@ def fetch_events(event_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="An unexpected error occurred: " + str(e))
 
 
-@router.post('/events/{event_id}/book')
+@router.post('/events/{event_id}/book',
+
+            summary="Book Events with PayPal" )
+
 async def book_event(event_id: int,
     request: Request,
     token: str = Depends(oauth2_scheme), 
     db: Session = Depends(get_db)):
 
     """ 
-    Flow to book event 
-    1. Check if Ticket quantity is there else set default 1
-    2. Check if Even exisit 
-    3. Check if even date is not passed 
-    4.  Check if user has pending or processing payments with other or same events
-    5. Check if ticket available based on quantity
-    6. Deduct required tickets from total ticket and  add it in reserve tickets 
-    7. Add booking and set status to Processing 
-    8. Genetate payment url (add success , cancel payment url's)
+    Flow to book event \n
+    1. Check if Ticket quantity is there else set default 1 \n
+    2. Check if Even exisit \n
+    3. Check if even date is not passed \n
+    4.  Check if user has pending or processing payments with other or same events \n
+    5. Check if ticket available based on quantity \n
+    6. Deduct required tickets from total ticket and  add it in reserve tickets \n
+    7. Add booking and set status to Processing \n
+    8. Genetate payment url (add success , cancel payment url's) \n
 
     """
 
@@ -251,14 +256,14 @@ async def success_payment(paymentId: str,
                         jwt_token: str, 
                         db: Session = Depends(get_db)):
     """ 
-    Flow:
-    1.Verify token
-    2.Verify payment id
-    3.Check Booking by id
-    4.Check event by id
-    5.Update Payment status to "successful"
-    6.Update - deduct booked tickets from Event reserve tickets
-    7.Commit and return 200 message
+    Flow: \n
+    1.Verify token \n
+    2.Verify payment id \n
+    3.Check Booking by id \n
+    4.Check event by id \n
+    5.Update Payment status to "successful" \n
+    6.Update - deduct booked tickets from Event reserve tickets \n
+    7.Commit and return 200 message \n
     """
     # 1.Verify token
     user = get_current_user(jwt_token)
@@ -305,14 +310,14 @@ async def success_payment(paymentId: str,
 @router.get('/cancel',status_code=200)
 async def cancel(request: Request,booking_id : str, jwt_token: str, db: Session = Depends(get_db)):
     """ 
-    Flow:
-    1. Check if token is valid and filter user
-    2. If user exisit continue
-    3. Check if booking data exisit based on booking id in url req with user and payment status matched
-    4. Check if event exist with same id
-    5. Update total tickets summinng canceled tickets 
-    6. Update reserve tickets by subtracting canceled tickets 
-    7. Commit and responde
+    Flow: \n
+    1. Check if token is valid and filter user \n
+    2. If user exisit continue \n
+    3. Check if booking data exisit based on booking id in url req with user and payment status matched \n
+    4. Check if event exist with same id \n
+    5. Update total tickets summinng canceled tickets  \n
+    6. Update reserve tickets by subtracting canceled tickets \n
+    7. Commit and responde \n
     """
     user = get_current_user(jwt_token)
     if user:
