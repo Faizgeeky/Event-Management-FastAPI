@@ -1,10 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import ValidationError
 from api.models import Users
-from api.schema import UserSchema, UserLoginSchema, TokenData, UserGlobalSchema
+from api.schema import UserSchema, UserLoginSchema, TokenData, UserGlobalSchema, UserLoginResponse, Status
 from api.database import get_db
 import jwt
 import api.config as config
@@ -48,17 +48,19 @@ def register(request : UserSchema, db: Session = Depends(get_db)):
         db.add(user)
         db.commit()
         db.refresh(user)
-        return {'id':user.id, 'name':user.username,'email':user.email}
-    
+        
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail="User already exists")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already exists")
 
     except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Data")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Invalid Request: " + str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid Request: " + str(e))
+    
+    user_schema = UserGlobalSchema.from_orm(user)
+    return {"Status":Status.Success,"User":user_schema}
     
 
 @router.post('/auth/login')
@@ -68,14 +70,11 @@ def login(request : UserLoginSchema, db: Session = Depends(get_db)):
         if user and user.check_password(request.password):
             # Get the access token using JWT to allow user to access the protected API
             access_token = create_access_token({"user":user.email})
-            return {
-                "access_token": access_token,
-                "token_type" : "bearer"
-            }
+            return UserLoginResponse(Status=Status.Success,access_token=access_token,token_type="bearer")
         else:
             raise HTTPException(status_code=401, detail="Invalid Credentials")
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Invalid Request: "+ str(e))
+        raise HTTPException(status_code=500, detail="Invalid Request" )
 
 
 
@@ -86,7 +85,7 @@ def loggedInUser(token: str = Depends(oauth2_scheme), db: Session = Depends(get_
         user = db.query(Users).filter(Users.email == token_data.user).first()
         if user:
             user_data = UserGlobalSchema.from_orm(user)
-            return user_data
+            return {"Status":Status.Success,"User":user_data}
         else:
             raise HTTPException(status_code=404, detail="User not found")
 

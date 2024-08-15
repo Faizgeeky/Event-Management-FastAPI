@@ -1,10 +1,17 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
+from enum import Enum
+
 
 class PaymentStatus:
     PENDING = "pending"
     SUCCESS = "success"
     FAILED = "failed"
+
+class Status(Enum):
+    Success = "Success"
+    Failed = "Failed"
+
 
 # USer schemas
 class UserSchema(BaseModel):
@@ -16,6 +23,10 @@ class UserLoginSchema(BaseModel):
     email: EmailStr
     password: str
 
+class UserLoginResponse(BaseModel):
+    Status : Status
+    access_token: str
+    token_type: str
 # User schema which use to return user withiout password
 class UserGlobalSchema(BaseModel):
     email : EmailStr
@@ -25,6 +36,21 @@ class UserGlobalSchema(BaseModel):
         orm_mode = True
         from_attributes = True
 
+
+class UserResponseSchema(BaseModel):
+    email : EmailStr
+    username : str
+    id : int
+    class Config:
+        orm_mode = True
+        from_attributes = True
+
+
+
+class UserResponse(BaseModel):
+    Status: Status
+    User: UserResponseSchema
+
 #  Access token schemas 
 class Token(BaseModel):
     access_token: str
@@ -33,6 +59,9 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     user: str
     expiry: float
+
+
+
 
 
 # Event Schema 
