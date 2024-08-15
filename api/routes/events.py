@@ -1,6 +1,6 @@
 '''
 Written By : Faizmohammad Nandoliya
-Last Updated     : 14-08-2024
+Last Updated     : 15-08-2024
 Contact  : nandoliyafaiz429@gmail.com
 
 NOTE : In function 'geocode_address' I have handled "else" block manually kindly change that in production. 
@@ -23,12 +23,13 @@ from paypalrestsdk import Payment
 
 
 paypalrestsdk.configure({
-  "mode": PAYPAL_ENV, # sandbox or live
+  "mode": PAYPAL_ENV, 
   "client_id": PAYPAL_CLIENT_ID,
   "client_secret": PAYPAL_SECRET_KEY })
 
 router = APIRouter()
 
+# function that returns coordinates from raw text address
 def geocode_address(address: str):
     url = f"https://maps.googleapis.com/maps/api/geocode/json"
     params = {
@@ -42,7 +43,7 @@ def geocode_address(address: str):
         location = data['results'][0]['geometry']['location']
         return location['lat'], location['lng']
     else:
-        # raise error here TEMPORARY returning Oolka office cordinates
+        # NOTE :raise error here TEMPORARY returning Oolka office cordinates
         return 12.925738470141543, 77.67473271259571
 
 # get the current loggedIn user from token decoding and model
@@ -333,14 +334,7 @@ async def cancel(request: Request,booking_id : str, jwt_token: str, db: Session 
     
 
 
-""" 
-1. Accept book request  - Done
-2. Check tickets avaibale  - Done
-3. Check event exisit  - Done 
-4. Create and reserve tickets until the payment has been made 1 minutes // Enhancement
-5. If payment is succesfull - remove reserved tickets  
-6. If payment is failed - remove reserved tickets and add it in total tickets 
-"""
+
 
 
 """" 
@@ -349,4 +343,5 @@ Enhancement :
 2. When user land on cancel or success with expire token 
 3. If same user has pending orders with same event or new event - take care of this so total tickets stays accurate
 4. Limit the booking tickets so not single person can buy each ticket at a time
+5. Encrypt and decrypt the parameters we passing to paypal url 
 """

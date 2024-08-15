@@ -48,7 +48,7 @@ def register(request : UserSchema, db: Session = Depends(get_db)):
         db.add(user)
         db.commit()
         db.refresh(user)
-        return {'id':user.id, 'name':user.name,'email':user.email}
+        return {'id':user.id, 'name':user.username,'email':user.email}
     
     except IntegrityError:
         db.rollback()

@@ -6,9 +6,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 class Users(Base):
     __tablename__= "users"
     id = Column(Integer, primary_key=True)
-    username = Column(String(50), nullable=False, min_length=4 , max_length=100)
+    username = Column(String(50), nullable=False)
     email = Column(String(100), nullable=False, unique=True)
-    password = Column(String(128), nullable=False, min_length = 5)
+    password = Column(String(255), nullable=False)
     is_admin = Column(Boolean, default=False)
   
 
@@ -21,9 +21,9 @@ class Users(Base):
 class Event(Base):
     __tablename__ = "events"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
+    name = Column(String(250), index=True)
     date = Column(DateTime)
-    location = Column(String)
+    location = Column(String(250))
     latitude = Column(Float)
     longitude = Column(Float)
     available_tickets = Column(Integer)
@@ -47,7 +47,7 @@ class Booking(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     number_of_tickets = Column(Integer)
     total_price = Column(Integer)
-    order_status = Column(String)
+    order_status = Column(String(150))
     event = relationship("Event")
 
 # class Payments(Base)
