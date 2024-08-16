@@ -133,15 +133,15 @@ A `Ookla-Event-API.postman_collection.json` file is included for easy testing of
 
   Run the Docker container with the environment variables from the .env file and map port 8000 to your local machine:
 
-    ```sh
+    
     Copy code
     docker run --env-file .env -p 8000:8000 oolka_app
     Access the application at http://127.0.0.1:8000/.
-    ```
+    
 
 ### Docker compose 
 
-    ```sh
+    
     docker-compose build
     docker-compose up
-    ```
+    
