@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 import os
 
-router = APIRouter()
+router = APIRouter(tags=["Index API"])
 
 @router.get("/",
           summary="Index Endpoint", 

@@ -1,21 +1,21 @@
 '''
 Written By : Faizmohammad Nandoliya
-Last Updated     : 15-08-2024
+Last Updated     : 16-08-2024
 Contact  : nandoliyafaiz429@gmail.com
 
 NOTE : In function 'geocode_address' I have handled "else" block manually kindly change that in production. 
 (I did beacuse I had no working Google map API)
 '''
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Query, Response
-from .auth import verify_token, oauth2_scheme
+from fastapi import APIRouter, Depends, HTTPException, Request
+from .auth import verify_token, JWTBearer
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from api.database import get_db
 from api.models import Users, Event, Booking
 import requests
-from api.schema import EventSchema, EventGlobalSchema, BookingSchema, PaymentStatus, EventResponse, Status, EventsResponse, EventBookResponse
+from api.schema import EventSchema, EventGlobalSchema, PaymentStatus, EventResponse, Status, EventsResponse, EventBookResponse, BookingSuccessSchema, BookingCanceledSchema
 from datetime import datetime
 from api.config import GOOGLE_MAPS_API_KEY, PAYPAL_SECRET_KEY, PAYPAL_CLIENT_ID, PAYPAL_ENV, HOST
 import paypalrestsdk
@@ -27,7 +27,7 @@ paypalrestsdk.configure({
   "client_id": PAYPAL_CLIENT_ID,
   "client_secret": PAYPAL_SECRET_KEY })
 
-router = APIRouter()
+router = APIRouter(tags=["Events API's"])
 
 # function that returns coordinates from raw text address
 def geocode_address(address: str):
@@ -54,22 +54,42 @@ def get_current_user(token):
     return user
 
 
-@router.post('/event',status_code=201)
-def add_event(event : EventSchema,token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+@router.post('/event', status_code=201, summary="Create Event - Only Admin can add", response_model=EventResponse)
+def add_event(event: EventSchema, token=Depends(JWTBearer()), db: Session = Depends(get_db)):
+    
+    # "LoggedIn Admin are only allowed to create events."
     latitude, longitude = geocode_address(event.location)
     
     user = get_current_user(token)
     try:
-        if user.is_admin and latitude != None and longitude != None:
-            db_event = Event(name = event.name, date = event.date, location = event.location, latitude = latitude, longitude =  longitude)
-            db_event.check_add_ticket_price(price_per_ticket = event.price_per_ticket)
-            db_event.check_add_tickets(available_tickets = event.available_tickets)
-            db.add(db_event)
-            db.commit()
-            db.refresh(db_event)
-            event =  EventGlobalSchema.from_orm(db_event)
-            return EventResponse(Status=Status.Success, Event=event)
+        # Ensure the user is an admin and the coordinates are valid
+        if not user.is_admin:
+            raise HTTPException(status_code=403, detail="Permission denied: Only admins can add events.")
+        
+        if latitude is None or longitude is None:
+            raise HTTPException(status_code=400, detail="Invalid location: Unable to geocode address.")
+        
+        # Create a new event and set its properties
+        db_event = Event(
+            name=event.name,
+            date=event.date,
+            location=event.location,
+            latitude=latitude,
+            longitude=longitude
+        )
+        db_event.check_add_ticket_price(price_per_ticket=event.price_per_ticket)
+        db_event.check_add_tickets(available_tickets=event.available_tickets)
 
+        # Add the event to the database and commit
+        db.add(db_event)
+        db.commit()
+        db.refresh(db_event)
+
+        # Create the response model instance with the event data
+        event_response = EventGlobalSchema.from_orm(db_event)
+        
+        return EventResponse(Status=Status.Success, Event=event_response)
+        
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=f"Invalid data: {ve}")
 
@@ -83,10 +103,12 @@ def add_event(event : EventSchema,token: str = Depends(oauth2_scheme), db: Sessi
 
     except Exception as e:
         raise HTTPException(status_code=500, detail="An unexpected error occurred: " + str(e))
+    
+
 
        
 
-@router.get('/events',status_code=200)
+@router.get('/events',status_code=200, summary="Fetch all evenets", response_model=EventsResponse)
 def fetch_events( db: Session = Depends(get_db)):
     # fetch all events 
     try:
@@ -105,8 +127,9 @@ def fetch_events( db: Session = Depends(get_db)):
 
     
 @router.get('/events/{event_id}',status_code=200,
-          summary="Create Event (Only for admin)", 
-          description="Admin only can add new Event" )
+          summary="Get Event by id", 
+          description="Admin only can add new Event",
+          response_model=EventResponse)
 def fetch_events(event_id: int, db: Session = Depends(get_db)):
     if event_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid event ID. ID must be a positive integer.")
@@ -127,26 +150,13 @@ def fetch_events(event_id: int, db: Session = Depends(get_db)):
 
 
 @router.post('/events/{event_id}/book',
-
-            summary="Book Events with PayPal" )
+            summary="Book Event with PayPal",
+            response_model=EventBookResponse )
 
 async def book_event(event_id: int,
     request: Request,
-    token: str = Depends(oauth2_scheme), 
+    token=Depends(JWTBearer()), 
     db: Session = Depends(get_db)):
-
-    """ 
-    Flow to book event \n
-    1. Check if Ticket quantity is there else set default 1 \n
-    2. Check if Even exisit \n
-    3. Check if even date is not passed \n
-    4.  Check if user has pending or processing payments with other or same events \n
-    5. Check if ticket available based on quantity \n
-    6. Deduct required tickets from total ticket and  add it in reserve tickets \n
-    7. Add booking and set status to Processing \n
-    8. Genetate payment url (add success , cancel payment url's) \n
-
-    """
 
     if event_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid event ID. ID must be a positive integer.")
@@ -248,28 +258,18 @@ async def book_event(event_id: int,
 
 
 
-@router.get('/success', status_code=200)
+@router.get('/success', status_code=200, response_model=BookingSuccessSchema)
 async def success_payment(paymentId: str,
                         PayerID: str,
                         booking_id : str,
                         event_id : str,
                         jwt_token: str, 
                         db: Session = Depends(get_db)):
-    """ 
-    Flow: \n
-    1.Verify token \n
-    2.Verify payment id \n
-    3.Check Booking by id \n
-    4.Check event by id \n
-    5.Update Payment status to "successful" \n
-    6.Update - deduct booked tickets from Event reserve tickets \n
-    7.Commit and return 200 message \n
-    """
-    # 1.Verify token
+    # 1.Validate token
     user = get_current_user(jwt_token)
     try:
         if user:
-            # 2.Verify payment id
+            # 2.Validate payment id
             payment = Payment.find(paymentId)
             if payment is None:
                 raise HTTPException(status_code=404, detail="Payment not found")
@@ -294,11 +294,10 @@ async def success_payment(paymentId: str,
                 db.refresh(booking_db)
                 db.refresh(event_db)
                 
-                return {"message": f"Payment successful", 
-                            "data":{"ticket_quantity":booking_db.number_of_tickets,
+                return BookingSuccessSchema(Status=Status.Success, Data={"ticket_quantity":booking_db.number_of_tickets,
                             "event_name":event_db.name,
-                            "booking_id":booking_db.id}}
-
+                            "booking_id":booking_db.id})
+            
             else:
                 raise HTTPException(status_code=404, detail="Payment failed")
         else:
@@ -307,38 +306,30 @@ async def success_payment(paymentId: str,
         raise HTTPException(status_code=500, detail="Unexpected error: " + str(e))
 
 
-@router.get('/cancel',status_code=200)
+@router.get('/cancel',status_code=200, response_model=BookingCanceledSchema)
 async def cancel(request: Request,booking_id : str, jwt_token: str, db: Session = Depends(get_db)):
-    """ 
-    Flow: \n
-    1. Check if token is valid and filter user \n
-    2. If user exisit continue \n
-    3. Check if booking data exisit based on booking id in url req with user and payment status matched \n
-    4. Check if event exist with same id \n
-    5. Update total tickets summinng canceled tickets  \n
-    6. Update reserve tickets by subtracting canceled tickets \n
-    7. Commit and responde \n
-    """
+    # 1.validate token
     user = get_current_user(jwt_token)
     if user:
         try:
+            # 2.validate booking id
             booking_db = db.query(Booking).filter(Booking.id == booking_id, Booking.user_id == user.id, Booking.order_status == PaymentStatus.PENDING ).first()
             if booking_db is None:
                 raise HTTPException(status_code=400, detail="Booking data not found" )
-            
+            # 3. validate Event
             event_db = db.query(Event).filter(Event.id == booking_db.event_id).first()
             if event_db is None:
                 raise HTTPException(status_code=400, detail="Event data not found" )
-            
+            #4. Data updaion - ticket numbers handling
             event_db.available_tickets += booking_db.number_of_tickets
             event_db.reserve_tickets -= booking_db.number_of_tickets
-            
+            # 5. Commit and responde
             booking_db.order_status = PaymentStatus.FAILED
             db.commit()
             db.refresh(event_db)
             db.refresh(booking_db)
-            return {"message":f"Booking canceld for the Event {event_db.name}"}
-
+            return BookingCanceledSchema(Status=Status.Success, Data={"message":f"Booking canceld for the Event {event_db.name}"})
+    
         except Exception as e:
             raise HTTPException(status_code=500, detail="An unexpected error occurred: " + str(e))
     else:
@@ -346,16 +337,3 @@ async def cancel(request: Request,booking_id : str, jwt_token: str, db: Session 
             
     
     
-
-
-
-
-
-"""" 
-Enhancement :
-1. When payment url is unclicked 
-2. When user land on cancel or success with expire token 
-3. If same user has pending orders with same event or new event - take care of this so total tickets stays accurate
-4. Limit the booking tickets so not single person can buy each ticket at a time
-5. Encrypt and decrypt the parameters we passing to paypal url 
-"""

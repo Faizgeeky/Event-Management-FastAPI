@@ -27,6 +27,7 @@ class UserLoginResponse(BaseModel):
     Status : Status
     access_token: str
     token_type: str
+
 # User schema which use to return user withiout password
 class UserGlobalSchema(BaseModel):
     email : EmailStr
@@ -41,10 +42,10 @@ class UserResponseSchema(BaseModel):
     email : EmailStr
     username : str
     id : int
+
     class Config:
         orm_mode = True
         from_attributes = True
-
 
 
 class UserResponse(BaseModel):
@@ -59,10 +60,6 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     user: str
     expiry: float
-
-
-
-
 
 # Event Schema 
 class EventSchema(BaseModel):
@@ -95,7 +92,6 @@ class EventsResponse(BaseModel):
     Status: Status
     Events: List[EventGlobalSchema]
 
-
 class EventBookResponse(BaseModel):
     Status: Status
     Data : dict
@@ -106,3 +102,11 @@ class BookingSchema(BaseModel):
     number_of_tickets : int
     total_price : float
     order_status : str
+
+class BookingSuccessSchema(BaseModel):
+    Status: Status
+    Data : dict
+
+class BookingCanceledSchema(BaseModel):
+    Status: Status
+    Data : dict
