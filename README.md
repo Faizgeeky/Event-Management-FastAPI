@@ -10,6 +10,16 @@
 - **PayPal**: Users can make payment to confirm the Bookings
 
 
+### Blog on How this API's are designed 
+
+    https://indigo-lord-166.notion.site/Event-Booking-Oolka-backend-task-44c10de260994bc8bfec09d488c31e1e?pvs=25
+
+
+### Demonstration Video for this API's
+
+    https://www.canva.com/design/DAGN_b4twU4/6YGLAi6kNWIewYf51IoJrA/watch?utm_content=DAGN_b4twU4&utm_campaign=designshare&utm_medium=link&utm_source=editor
+
+
 ## Setup Instructions
 
 ### Clone the Repository
@@ -145,3 +155,14 @@ A `Ookla-Event-API.postman_collection.json` file is included for easy testing of
     docker-compose build
     docker-compose up
     
+
+
+### API Documentations 
+
+- It can be downloaded and test live while running the api's on webbrowser 
+
+    <!-- API Testing -->
+    http://127.0.0.0:8000/docs 
+
+    <!-- API Documentation -->
+    http://127.0.0.0:8000/redoc
