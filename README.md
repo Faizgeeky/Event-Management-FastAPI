@@ -31,7 +31,7 @@ git clone https://github.com/Faizgeeky/Oolka-backend-task.git
 cd Oolka-backend-task
 ```
 
-### Setting Up the Django WebSocket Server
+### Setting Up the Server
 
 
 
