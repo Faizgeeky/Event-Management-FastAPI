@@ -27,8 +27,8 @@
 To get started, clone the repository to your local machine:
 
 ```sh
-git clone https://github.com/Faizgeeky/Oolka-backend-task.git
-cd Oolka-backend-task
+git clone https://github.com/Faizgeeky/Event-Management-FastAPI.git
+cd Event-Management-FastAPI
 ```
 
 ### Setting Up the Server
