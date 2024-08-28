@@ -1,4 +1,4 @@
-# Oolka-backend-task
+# Event Management API using FastAPI and PayPal Payment Gateway
 
 ###  Features
 
