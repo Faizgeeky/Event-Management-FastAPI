@@ -10,9 +10,9 @@
 - **PayPal**: Users can make payment to confirm the Bookings
 
 
-### Blog on How this API's are designed 
+### Medium Blog on How this API's are designed 
 
-    https://indigo-lord-166.notion.site/Event-Booking-Oolka-backend-task-44c10de260994bc8bfec09d488c31e1e?pvs=25
+    [https://indigo-lord-166.notion.site/Event-Booking-Oolka-backend-task-44c10de260994bc8bfec09d488c31e1e?pvs=25](https://medium.com/@nandoliyafaiz429/fastapi-event-booking-restapi-with-payment-gateway-integration-a4a64268ae05)
 
 
 ### Demonstration Video for this API's
