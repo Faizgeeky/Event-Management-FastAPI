@@ -166,3 +166,60 @@ A `Ookla-Event-API.postman_collection.json` file is included for easy testing of
 
     <!-- API Documentation -->
     http://127.0.0.0:8000/redoc
+
+
+<h2>🚀 FastAPI Event Booking REST API with Payment Gateway</h2>
+
+<p>👋 Hi, I’m Faiz — Tech Lead Engineer and open-source builder.</p>
+
+<p>In this post, I’ll walk you through how to build a <strong>scalable Event Booking REST API</strong> using <strong>FastAPI</strong>, including <strong>payment gateway integration</strong>, clean architecture, and production-ready practices.</p>
+
+<hr/>
+
+<h3>📦 What you'll learn</h3>
+<ul>
+  <li>Designing REST APIs with FastAPI</li>
+  <li>Event booking & seat management logic</li>
+  <li>Payment gateway integration flow</li>
+  <li>Database design & optimization</li>
+  <li>Production-ready backend structure</li>
+</ul>
+
+<hr/>
+
+<h3>💻 Source Code</h3>
+<p>
+👉 <a href="https://github.com/Faizgeeky" target="_blank">
+View full project on GitHub
+</a>
+</p>
+
+<hr/>
+
+<h3>☕ Support My Work</h3>
+<p>
+I build free tools and open-source projects for developers:
+</p>
+
+<ul>
+  <li>🌐 <a href="https://webtoolz365.com/" target="_blank">40+ Free Web Tools</a></li>
+  <li>⚙️ FastAPI / Flask Boilerplates</li>
+  <li>📦 Open-source libraries</li>
+</ul>
+
+<p>
+If this guide helps you or saves your time, consider supporting:
+</p>
+
+<p>
+👉 <a href="https://buymeacoffee.com/geekyfaiz" target="_blank" style="font-weight:bold;">
+Buy me a coffee ☕
+</a>
+</p>
+
+<hr/>
+
+<h3>🚀 Let’s build something awesome!</h3>
+<p>
+Feel free to connect, contribute, or give feedback.
+</p>
